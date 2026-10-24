@@ -38,7 +38,7 @@
 - [x] Approval hash binds the raw Caddyfile and exact proposed routes; stale state is rejected.
 - [x] Validate staged Caddyfile before replacement; keep timestamped backup and preserve file metadata.
 - [x] Atomic replacement, Caddy reload, HTTPS connectivity checks, JSON-lines audit log, and rollback attempt.
-- [x] Restrict execution to Caddy route additions; Docker/firewall execution remains unsupported.
+- [x] Restrict execution to Caddy route additions; refuse plans with blockers; Docker/firewall execution remains unsupported.
 - [ ] Package and install the updated version on the Pi.
 - [ ] Operator review and deliberate execution on the Pi; verify backup, connectivity checks, audit log, and post-change audit.
 - [ ] Validate rollback behavior on a non-production test Caddy instance before relying on it for important services.

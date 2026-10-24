@@ -19,6 +19,15 @@ from urllib.parse import urlparse
 class ExecutionError(RuntimeError):
     """A guarded configuration update was refused or rolled back."""
 
+def ensure_plan_executable(plan: dict[str, object]) -> None:
+    """Refuse any plan containing a blocking audit finding."""
+    summary = plan.get("summary", {})
+    blocked = summary.get("blocked", 0) if isinstance(summary, dict) else 0
+    if blocked:
+        raise ExecutionError(f"plan contains {blocked} blocker(s); resolve them and create a fresh plan before applying changes")
+    if not plan.get("proposed_routes"):
+        raise ExecutionError("the current plan contains no eligible Caddy route additions")
+
 def sha256_bytes(content: bytes) -> str:
     return hashlib.sha256(content).hexdigest()
 
@@ -44,6 +53,47 @@ def _record(audit_log: Path, record: dict[str, object]) -> None:
     audit_log.parent.mkdir(parents=True, exist_ok=True)
     with audit_log.open("a", encoding="utf-8") as stream:
         stream.write(json.dumps(record, sort_keys=True) + "\n")
+
+def validate_caddy_proposal(
+    caddyfile: Path,
+    routes: list[dict[str, str]],
+    expected_base_sha256: str,
+    *,
+    runner: Callable[..., subprocess.CompletedProcess] | None = None,
+) -> dict[str, object]:
+    """Validate proposed routes in a temporary sibling file without touching live config."""
+    run = runner or subprocess.run
+    path = caddyfile.expanduser()
+    if path.is_symlink() or not path.is_file():
+        raise ExecutionError("Caddyfile must be an existing regular file, not a symlink")
+    if not routes or any(set(route) != {"domain", "block"} for route in routes):
+        raise ExecutionError("there are no valid planner-generated Caddy routes to validate")
+    original = path.read_bytes()
+    if sha256_bytes(original) != expected_base_sha256:
+        raise ExecutionError("Caddyfile changed since planning; create a fresh plan")
+    try:
+        original_text = original.decode("utf-8")
+    except UnicodeDecodeError as error:
+        raise ExecutionError("Caddyfile must be UTF-8") from error
+    separator = "" if not original_text or original_text.endswith("\n") else "\n"
+    proposed = (original_text + separator + "\n".join(route["block"] for route in routes) + "\n").encode()
+    temp_name: str | None = None
+    try:
+        fd, temp_name = tempfile.mkstemp(prefix=f".{path.name}.netsentry-validate-", suffix=".tmp", dir=path.parent)
+        with os.fdopen(fd, "wb") as stream:
+            stream.write(proposed)
+            stream.flush()
+            os.fsync(stream.fileno())
+        validation = run(["caddy", "validate", "--config", temp_name, "--adapter", "caddyfile"],
+                         capture_output=True, text=True, timeout=30, check=False, shell=False)
+        if validation.returncode != 0:
+            raise ExecutionError("proposed Caddyfile is invalid: " + (validation.stderr or validation.stdout).strip())
+        return {"valid": True, "routes": [route["domain"] for route in routes],
+                "message": "Proposed Caddyfile passed caddy validate; live configuration was not changed."}
+    finally:
+        if temp_name and os.path.exists(temp_name):
+            os.unlink(temp_name)
+
 
 def apply_caddy_update(caddyfile: Path, routes: list[dict[str, str]], expected_base_sha256: str,
                        approved_sha256: str, check_urls: list[str], audit_log: Path, *,

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import subprocess
+from pathlib import Path
 
 import pytest
 
@@ -88,3 +89,53 @@ def test_rejects_http_connectivity_check(tmp_path):
     config, audit, _original, base_hash, digest = _setup(tmp_path)
     with pytest.raises(ExecutionError, match="must use an https"):
         apply_caddy_update(config, ROUTES, base_hash, digest, ["http://app.home.arpa"], audit)
+
+
+
+def test_execution_refuses_plan_with_blockers():
+    from netsentry.execution import ExecutionError, ensure_plan_executable
+
+    plan = {"summary": {"blocked": 1}, "proposed_routes": [{"domain": "app.home.arpa", "block": "x"}]}
+    with pytest.raises(ExecutionError, match="resolve them"):
+        ensure_plan_executable(plan)
+
+
+def test_execution_allows_unblocked_route_plan():
+    from netsentry.execution import ensure_plan_executable
+
+    ensure_plan_executable({"summary": {"blocked": 0},
+                            "proposed_routes": [{"domain": "app.home.arpa", "block": "x"}]})
+
+
+def test_validate_caddy_proposal_checks_temp_file_and_preserves_original(tmp_path):
+    from netsentry.execution import validate_caddy_proposal
+
+    config, _audit, original, base_hash, _digest = _setup(tmp_path)
+    observed = {}
+    def runner(command, **kwargs):
+        staged = Path(command[3])
+        observed["staged"] = staged
+        observed["staged_content"] = staged.read_bytes()
+        observed["original_content"] = config.read_bytes()
+        return subprocess.CompletedProcess(command, 0, "valid", "")
+
+    result = validate_caddy_proposal(config, ROUTES, base_hash, runner=runner)
+    assert result["valid"] is True
+    assert config.read_bytes() == original
+    assert observed["original_content"] == original
+    assert b"reverse_proxy 127.0.0.1:9000" in observed["staged_content"]
+    assert not observed["staged"].exists()
+    assert list(tmp_path.glob("*.bak")) == []
+
+
+def test_validate_caddy_proposal_validation_failure_preserves_original(tmp_path):
+    from netsentry.execution import validate_caddy_proposal
+
+    config, _audit, original, base_hash, _digest = _setup(tmp_path)
+    def runner(command, **kwargs):
+        return subprocess.CompletedProcess(command, 1, "", "bad Caddy syntax")
+
+    with pytest.raises(ExecutionError, match="proposed Caddyfile is invalid"):
+        validate_caddy_proposal(config, ROUTES, base_hash, runner=runner)
+    assert config.read_bytes() == original
+    assert list(tmp_path.glob(".*.tmp")) == []

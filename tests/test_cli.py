@@ -81,3 +81,8 @@ def test_plan_prints_hash_for_current_caddy_and_routes(tmp_path, monkeypatch):
     report = __import__("json").loads(result.output)
     assert report["approval_sha256"] == approval_digest(sha256_bytes(raw), report["proposed_routes"])
     assert report["base_sha256"] == sha256_bytes(raw)
+
+def test_validate_plan_command_help_is_available():
+    result = CliRunner().invoke(app, ["validate-plan", "--help"])
+    assert result.exit_code == 0
+    assert "never reload or replace" in " ".join(result.output.split())

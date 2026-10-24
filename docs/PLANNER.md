@@ -14,7 +14,7 @@
 
 ## Phase 4 execution boundary
 
-`netsentry apply-caddy` supports only proposed route additions. It requires the current approval hash, rejects changed Caddyfiles and symlinks, validates a staged copy with `caddy validate`, creates a timestamped backup, atomically replaces the Caddyfile, reloads Caddy, performs HTTPS checks, and writes a JSON-lines audit record. It rolls back the file and attempts a reload when the reload or connectivity check fails. On Linux it requires root. It never executes Docker or firewall changes.
+`netsentry apply-caddy` supports only proposed route additions and refuses any plan containing blockers. It requires the current approval hash, rejects changed Caddyfiles and symlinks, validates a staged copy with `caddy validate`, creates a timestamped backup, atomically replaces the Caddyfile, reloads Caddy, performs HTTPS checks, and writes a JSON-lines audit record. It rolls back the file and attempts a reload when the reload or connectivity check fails. On Linux it requires root. It never executes Docker or firewall changes.
 
 Execution is an explicit operator action. The planning command remains read-only; no apply command was run against the Pi during development. A successful Caddy update is not proof that direct Docker exposure is resolved; rerun the audit and review remaining findings.
 
@@ -26,3 +26,12 @@ sudo "$(command -v netsentry)" apply-caddy policies.json --caddyfile /etc/caddy/
 ```
 
 For Caddy internal certificates, pass the local root certificate with `--ca-cert`; use the actual path found on the Pi. Use the hash from the immediately preceding reviewed plan. A changed policy, Caddyfile, or observation that changes the proposed route set requires a new plan and hash.
+
+
+## Validate without applying
+
+Use `netsentry validate-plan` to run `caddy validate` against a temporary sibling file containing the proposed additions. It removes the temporary file afterward and never replaces the live Caddyfile, reloads Caddy, creates a backup, or changes Docker/firewall state. It can validate syntax even while audit blockers remain; those blockers are printed and still prevent `apply-caddy`.
+
+```bash
+sudo "$(command -v netsentry)" validate-plan policies.json --caddyfile /etc/caddy/Caddyfile
+```

@@ -227,6 +227,42 @@ def plan(
     if result["summary"]["blocked"]:
         raise typer.Exit(code=1)
 
+@app.command("validate-plan")
+def validate_plan_command(
+    policy_file: Annotated[Path, typer.Argument(exists=True, readable=True, help="Version 1 JSON exposure policy.")],
+    caddyfile: Annotated[Path, typer.Option("--caddyfile", help="Caddyfile to read; never overwritten.")] = Path("/etc/caddy/Caddyfile"),
+) -> None:
+    """Validate proposed Caddy additions using a temporary file; never reload or replace config."""
+    from netsentry.execution import (
+        ExecutionError,
+        sha256_bytes,
+        validate_caddy_proposal,
+    )
+    from netsentry.inspection import (
+        inspect_caddy_config,
+        inspect_docker_ports,
+        inspect_firewall,
+        inspect_ports,
+    )
+    from netsentry.planner import build_plan
+    from netsentry.policy import load_policy
+
+    try:
+        policy = load_policy(policy_file)
+        result = build_plan(policy, inspect_docker_ports(), inspect_caddy_config(caddyfile),
+                            inspect_firewall(), inspect_ports())
+        if not result["proposed_routes"]:
+            raise ExecutionError("the plan contains no proposed Caddy routes to validate")
+        outcome = validate_caddy_proposal(caddyfile, result["proposed_routes"], sha256_bytes(caddyfile.read_bytes()))
+    except (OSError, TypeError, ValueError, ExecutionError) as error:
+        typer.echo(f"Caddy proposal validation failed: {error}", err=True)
+        raise typer.Exit(code=1) from error
+    typer.echo("VALID: " + ", ".join(outcome["routes"]))
+    typer.echo(outcome["message"])
+    if result["summary"]["blocked"]:
+        typer.echo(f"Audit still reports {result['summary']['blocked']} blocker(s); this command only checks Caddy syntax.")
+
+
 @app.command("apply-caddy")
 def apply_caddy_command(
     policy_file: Annotated[Path, typer.Argument(exists=True, readable=True, help="Version 1 JSON exposure policy.")],
@@ -240,6 +276,7 @@ def apply_caddy_command(
         ExecutionError,
         apply_caddy_update,
         approval_digest,
+        ensure_plan_executable,
         sha256_bytes,
     )
     from netsentry.inspection import (
@@ -255,9 +292,8 @@ def apply_caddy_command(
         policy = load_policy(policy_file)
         result = build_plan(policy, inspect_docker_ports(), inspect_caddy_config(caddyfile),
                             inspect_firewall(), inspect_ports())
+        ensure_plan_executable(result)
         routes = result["proposed_routes"]
-        if not routes:
-            raise ExecutionError("the current plan contains no eligible Caddy route additions")
         base_hash = sha256_bytes(caddyfile.read_bytes())
         expected = approval_digest(base_hash, routes)
         if approve != expected:
