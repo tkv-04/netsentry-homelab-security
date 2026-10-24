@@ -1,38 +1,34 @@
 # NetSentry project status
 
-## Completed
+Roadmap from the project brief:
 
-- [x] Phase 1: single-host HTTPS certificate check with normal TLS certificate and hostname validation.
-- [x] Phase 1: read-only Typer CLI with human-readable and JSON output.
-- [x] Phase 1: browser GUI, bound to localhost by default and configurable for LAN use.
-- [x] Phase 1: Windows/VS Code setup notes, safety documentation, example target list, and tests.
-- [x] Pi validation: GUI reached from Windows; local DNS resolution and Caddy HTTPS were configured; Caddy's internal CA was trusted by the Pi; the check succeeded.
-- [x] Phase 2: manually supplied multi-host HTTPS checks in both CLI and GUI, capped at 25 hosts per batch.
-- [x] Phase 2: per-host success/failure details, including certificate subject and expiry for successful checks.
-- [x] Phase 2: CLI JSON output and nonzero exit status when any target fails.
+1. **Foundation and read-only CLI** — installable package, tests, and local inspection commands for listeners, Docker-published ports, Caddy configuration, and firewall state. No system changes.
+2. **Security policy and audit engine** — record whether each app should be proxy-only, LAN-accessible, or deliberately public, then compare those policies with observed configuration.
 
-## Phase 2 usage
+## Phase 1 checklist
 
-Add one host per line to `examples/targets.txt`, then run:
+- [x] Installable Python package, project metadata, and ignore rules.
+- [x] Typer CLI and initial automated tests.
+- [x] Read-only HTTPS certificate checks for one host and explicit target lists.
+- [x] Browser GUI for explicit HTTPS checks; localhost by default, optional LAN bind.
+- [x] Inspect local listening ports (`netsentry inspect ports`).
+- [x] Inspect Docker-published ports (`netsentry inspect docker-ports`).
+- [x] Read Caddyfile configuration with basic credential-line redaction (`netsentry inspect caddy`).
+- [x] Inspect available UFW, nftables, and iptables firewall state (`netsentry inspect firewall`).
+- [x] README, Windows/Linux setup, example target list, and safety documentation.
+- [x] Pi HTTPS validation with Caddy's internal CA after adding its root certificate to the Pi trust store.
 
-```bash
-netsentry check-list examples/targets.txt --port 443
-```
+The inspection commands query the machine where NetSentry runs. Run them on the Pi to inspect the Pi. They do not alter system state. Some commands may show limited detail without elevated read permissions.
 
-In the GUI, enter one hostname per line and click **Check certificates**. Each batch has a shared port and a 25-host limit. NetSentry only contacts the hosts explicitly listed; it does not perform network discovery.
+## Phase 2 checklist
+
+- [ ] Define per-app exposure policy: proxy-only, LAN-accessible, or deliberately public.
+- [ ] Collect observed state from listeners, Docker-published ports, Caddy configuration, and firewall rules.
+- [ ] Compare intended policy with observed state and report mismatches.
+- [ ] Add tests and documentation for policy format and audit results.
+
+Phase 2 has **not started**. The multi-host HTTPS batch feature is an additional read-only utility; it is not the policy/audit engine.
 
 ## Verification
 
-Run the tests after installing development dependencies:
-
-```bash
-python -m pytest -q
-```
-
-## Next ideas
-
-- Saved, editable inventory and scan history.
-- Expiry warning thresholds and report export.
-- Optional scheduled checks.
-
-These are future ideas, not implemented features.
+Run `python -m pytest -q` and `ruff check src tests` from the project directory.

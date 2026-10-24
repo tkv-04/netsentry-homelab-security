@@ -99,9 +99,46 @@ def gui(
 
 
 
+inspect_app = typer.Typer(help="Read-only inspection of this machine.", no_args_is_help=True)
+app.add_typer(inspect_app, name="inspect")
+
+
+@inspect_app.command("ports")
+def inspect_ports_command(json_output: bool = typer.Option(False, "--json")) -> None:
+    """Inspect local listening TCP/UDP ports."""
+    from netsentry.inspection import format_report, inspect_ports
+
+    typer.echo(format_report(inspect_ports(), json_output))
+
+
+@inspect_app.command("docker-ports")
+def inspect_docker_ports_command(json_output: bool = typer.Option(False, "--json")) -> None:
+    """Inspect Docker-published ports and container names."""
+    from netsentry.inspection import format_report, inspect_docker_ports
+
+    typer.echo(format_report(inspect_docker_ports(), json_output))
+
+
+@inspect_app.command("caddy")
+def inspect_caddy_command(
+    path: Annotated[Path, typer.Option("--path", help="Caddyfile path.")] = Path("/etc/caddy/Caddyfile"),
+    json_output: bool = typer.Option(False, "--json"),
+) -> None:
+    """Read the Caddyfile, redacting lines that look like secrets."""
+    from netsentry.inspection import format_report, inspect_caddy_config
+
+    typer.echo(format_report(inspect_caddy_config(path), json_output))
+
+
+@inspect_app.command("firewall")
+def inspect_firewall_command(json_output: bool = typer.Option(False, "--json")) -> None:
+    """Inspect UFW, nftables, and iptables state on Linux."""
+    from netsentry.inspection import format_report, inspect_firewall
+
+    typer.echo(format_report(inspect_firewall(), json_output))
+
+
 
 if __name__ == "__main__":
     app()
-
-
 

@@ -46,3 +46,10 @@ def test_check_list_reports_each_target(tmp_path, monkeypatch):
     assert "FAIL two.example:443" in result.output
 
 
+
+
+def test_inspect_commands_are_registered():
+    result = CliRunner().invoke(app, ["inspect", "--help"])
+    assert result.exit_code == 0
+    assert "docker-ports" in result.output
+    assert "firewall" in result.output

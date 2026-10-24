@@ -33,3 +33,33 @@ def test_load_targets_enforces_batch_limit(tmp_path):
     target_file.write_text("one\ntwo\nthree\n", encoding="utf-8")
     with pytest.raises(ValueError, match="at most 2"):
         load_targets(target_file, limit=2)
+
+
+def test_caddy_inspection_redacts_secret_lines(tmp_path):
+    from netsentry.inspection import inspect_caddy_config
+
+    config = tmp_path / "Caddyfile"
+    config.write_text("ha.home.arpa {\n reverse_proxy localhost:8123\n header Authorization secret-value\n}\n")
+    report = inspect_caddy_config(config)
+    assert "reverse_proxy localhost:8123" in report["output"]
+    assert "secret-value" not in report["output"]
+    assert "[REDACTED]" in report["output"]
+
+
+def test_inspection_commands_do_not_use_a_shell(monkeypatch):
+    import subprocess
+
+    from netsentry.inspection import _run
+
+    observed = {}
+
+    def fake_run(command, **kwargs):
+        observed["command"] = command
+        observed.update(kwargs)
+        return subprocess.CompletedProcess(command, 0, stdout="listening", stderr="")
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    report = _run(["ss", "-lntup"])
+    assert report["output"] == "listening"
+    assert observed["shell"] is not True
+    assert observed["timeout"] == 10
