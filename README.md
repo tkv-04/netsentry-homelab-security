@@ -72,7 +72,7 @@ Open `http://<pi-ip-address>:8081` from your LAN. The default bind is `127.0.0.1
 
 ## Safety
 
-NetSentry inspection and audit commands are read-only. They do not modify listening services, Docker, Caddy, firewall rules, or policy files. See [docs/SECURITY.md](docs/SECURITY.md).
+NetSentry inspection and audit commands are read-only. They do not modify listening services, Docker, Caddy, firewall rules, or policy files. See [docs/SECURITY.md](docs/SECURITY.md) and [docs/DASHBOARD-SECURITY.md](docs/DASHBOARD-SECURITY.md).
 
 ## Phase 3: dry-run change planner
 
@@ -105,3 +105,33 @@ sudo "$(command -v netsentry)" validate-plan policies.json --caddyfile /etc/cadd
 ```
 
 This creates and removes a temporary sibling file so Caddy resolves imports from the same directory. It does not create a backup or edit the existing Caddyfile.
+## Phase 5: React dashboard
+
+The React dashboard uses the same versioned local policy, audit engine, and dry-run planner as the CLI. It has overview, audit findings, and proposed change views. The dashboard API is read-only; it cannot edit policy files, apply Caddy plans, change Docker, or change firewall rules.
+
+### Build the frontend
+
+Node.js is needed only to build the static React interface. From `web/`:
+
+```powershell
+npm install
+npm run build
+```
+
+This writes the production assets into `src/netsentry/dashboard/`, which is packaged with NetSentry. Install the API server extra in the Python environment:
+
+```bash
+python -m pip install -e ".[web]"
+```
+
+### Run the dashboard
+
+The API binds to localhost by default and uses the paths passed at startup:
+
+```bash
+netsentry dashboard --host 127.0.0.1 --port 8090 --policy-file policies.json --caddyfile /etc/caddy/Caddyfile
+```
+
+Open `http://127.0.0.1:8090`. For local UI development, start the API with `netsentry dashboard` in one terminal and `npm run dev` in `web/` in another; Vite serves the React source and proxies `/api` to port 8090. To access it from another LAN device, the operator must explicitly bind `--host 0.0.0.0`; the dashboard has no login, so expose it only on a trusted network. Node.js is not needed on the Pi after the built assets are packaged.
+
+The production React bundle is built and included under the Python package assets. API route tests pass against the existing policy, audit, and planner logic. A live browser/API session and Pi installation are still to be verified.

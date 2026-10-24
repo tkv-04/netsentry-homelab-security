@@ -86,3 +86,9 @@ def test_validate_plan_command_help_is_available():
     result = CliRunner().invoke(app, ["validate-plan", "--help"])
     assert result.exit_code == 0
     assert "never reload or replace" in " ".join(result.output.split())
+
+def test_dashboard_command_help_is_available():
+    result = CliRunner().invoke(app, ["dashboard", "--help"])
+    assert result.exit_code == 0
+    assert "--policy-file" in result.output
+    assert "localhost by default" in " ".join(result.output.split())

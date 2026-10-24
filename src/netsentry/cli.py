@@ -314,6 +314,23 @@ def apply_caddy_command(
     for check in outcome["connectivity"]:
         typer.echo(f"HTTPS check passed: {check['url']} (HTTP {check['status_code']})")
 
+@app.command("dashboard")
+def dashboard(
+    host: str = typer.Option("127.0.0.1", "--host", help="Interface to bind; localhost by default."),
+    port: int = typer.Option(8090, min=1, max=65535, help="Dashboard port."),
+    policy_file: Annotated[Path, typer.Option("--policy-file", help="Local policy JSON read by the dashboard.")] = Path("policies.json"),
+    caddyfile: Annotated[Path, typer.Option("--caddyfile", help="Caddyfile to inspect.")] = Path("/etc/caddy/Caddyfile"),
+) -> None:
+    """Serve the read-only React security dashboard and local JSON API."""
+    from netsentry.dashboard_api import serve_dashboard
+
+    try:
+        serve_dashboard(host, port, policy_file, caddyfile)
+    except RuntimeError as error:
+        typer.echo(str(error), err=True)
+        raise typer.Exit(code=1) from error
+
+
 if __name__ == "__main__":
     app()
 

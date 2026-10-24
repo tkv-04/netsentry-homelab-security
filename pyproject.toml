@@ -12,6 +12,7 @@ license = { text = "MIT" }
 dependencies = ["typer>=0.12,<1"]
 
 [project.optional-dependencies]
+web = ["fastapi>=0.115,<1", "uvicorn>=0.30,<1"]
 dev = ["pytest>=8,<9", "ruff>=0.6,<1"]
 
 [project.scripts]
@@ -19,6 +20,9 @@ netsentry = "netsentry.cli:app"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/netsentry"]
+
+[tool.hatch.build.targets.wheel.force-include]
+"src/netsentry/dashboard" = "netsentry/dashboard"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
