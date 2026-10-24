@@ -157,3 +157,17 @@ def test_policy_rejects_invalid_allowed_source_network(tmp_path):
     path.write_text('{"version":1,"apps":[{"name":"x","exposure":"lan","allowed_sources":["home"]}]}', encoding="utf-8")
     with pytest.raises(ValueError, match="CIDR"):
         load_policy(path)
+
+
+def test_lan_policy_can_also_require_a_caddy_route():
+    from netsentry.audit import audit_policy
+
+    findings = audit_policy(
+        {"apps": [{"name": "AdGuard UI", "exposure": "lan", "container_names": ["adguardhome"],
+                   "container_ports": [3000], "domains": ["adguard.home.arpa"],
+                   "upstreams": ["192.168.0.5:3000"], "allowed_sources": ["192.168.0.0/24"]}]},
+        {"available": True, "containers": [{"Names": "adguardhome", "Ports": "192.168.0.5:3000->3000/tcp"}]},
+        {"available": True, "output": ""}, {"results": []}, {"output": ""},
+    )
+    assert any(item["code"] == "caddy-route-missing" for item in findings)
+    assert any(item["code"] == "caddy-upstream-missing" for item in findings)

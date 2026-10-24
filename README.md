@@ -73,3 +73,14 @@ Open `http://<pi-ip-address>:8081` from your LAN. The default bind is `127.0.0.1
 ## Safety
 
 NetSentry inspection and audit commands are read-only. They do not modify listening services, Docker, Caddy, firewall rules, or policy files. See [docs/SECURITY.md](docs/SECURITY.md).
+
+## Phase 3: dry-run change planner
+
+Generate a proposal from current observations. The planner can show a unified diff for missing Caddy routes when each declared domain has one safe, paired upstream. It flags direct Docker exposure as blocked when the deployment source needed for a safe binding change is unavailable, and it leaves Docker firewall changes for operator review.
+
+```bash
+sudo "$(command -v netsentry)" plan policies.json --caddyfile /etc/caddy/Caddyfile
+sudo "$(command -v netsentry)" plan policies.json --caddyfile /etc/caddy/Caddyfile --json
+```
+
+The planner never writes the Caddyfile or policies, runs firewall commands, changes Docker, or restarts services. A proposed diff still needs review and validation before anyone applies it. See [docs/PLANNER.md](docs/PLANNER.md).

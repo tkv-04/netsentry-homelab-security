@@ -182,8 +182,46 @@ def audit(
 
 
 
+@app.command("plan")
+def plan(
+    policy_file: Annotated[Path, typer.Argument(exists=True, readable=True, help="Version 1 JSON exposure policy.")],
+    caddyfile: Annotated[Path, typer.Option("--caddyfile", help="Caddyfile to inspect.")] = Path("/etc/caddy/Caddyfile"),
+    json_output: bool = typer.Option(False, "--json", help="Print machine-readable plan."),
+) -> None:
+    """Show a dry-run configuration proposal and review blockers; never apply changes."""
+    from netsentry.inspection import (
+        inspect_caddy_config,
+        inspect_docker_ports,
+        inspect_firewall,
+        inspect_ports,
+    )
+    from netsentry.planner import build_plan
+    from netsentry.policy import load_policy
+
+    try:
+        policy = load_policy(policy_file)
+    except (OSError, TypeError, ValueError, json.JSONDecodeError) as error:
+        typer.echo(f"Could not load policy: {error}", err=True)
+        raise typer.Exit(code=2) from error
+    result = build_plan(policy, inspect_docker_ports(), inspect_caddy_config(caddyfile),
+                        inspect_firewall(), inspect_ports())
+    if json_output:
+        typer.echo(json.dumps(result, indent=2))
+        return
+    typer.echo("DRY RUN ONLY — no files or system settings changed.")
+    for item in result["items"]:
+        typer.echo(f"{item['status'].upper()} [{item['code']}] {item['app']}: {item['message']}")
+    typer.echo("Summary: " + ", ".join(f"{key}={value}" for key, value in result["summary"].items()))
+    if result["diff"]:
+        typer.echo("\nProposed Caddy diff:\n" + result["diff"])
+    typer.echo(result["note"])
+    if result["summary"]["blocked"]:
+        raise typer.Exit(code=1)
+
 if __name__ == "__main__":
     app()
+
+
 
 
 

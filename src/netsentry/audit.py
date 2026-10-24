@@ -113,6 +113,21 @@ def audit_policy(
             findings.append({"severity": "review", "code": "container-not-found", "app": name,
                              "message": "No configured Docker container name matched the current inventory."})
 
+        if exposure != "proxy-only":
+            for domain in app.get("domains", []):
+                if not caddy.get("available"):
+                    findings.append({"severity": "review", "code": "caddy-unavailable", "app": name,
+                                     "message": f"Could not inspect Caddy to verify route for {domain}."})
+                elif domain not in caddy_text:
+                    findings.append({"severity": "mismatch", "code": "caddy-route-missing", "app": name,
+                                     "message": f"Configured Caddyfile does not contain domain {domain}."})
+            for upstream in app.get("upstreams", []):
+                if not caddy.get("available"):
+                    findings.append({"severity": "review", "code": "caddy-unavailable", "app": name,
+                                     "message": f"Could not inspect Caddy to verify upstream {upstream}."})
+                elif upstream not in caddy_text:
+                    findings.append({"severity": "mismatch", "code": "caddy-upstream-missing", "app": name,
+                                     "message": f"Configured Caddyfile does not contain upstream {upstream}."})
         if exposure == "proxy-only":
             broad = [item for item in matched if not _is_loopback(item["host_ip"])]
             broad.extend({"host_ip": address, "host_port": port} for address, port in listeners
@@ -193,6 +208,8 @@ def audit_policy(
                          "message": "Docker inventory is unavailable; run the audit with permission to query Docker."})
 
     return findings
+
+
 
 
 
