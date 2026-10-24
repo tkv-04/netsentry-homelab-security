@@ -59,3 +59,23 @@ def test_plan_does_not_generate_firewall_commands_for_docker():
                for item in result["items"])
     assert "iptables" not in str(result)
 
+
+
+def test_plan_diff_keeps_added_blocks_on_separate_lines_without_final_newline():
+    result = _base({"apps": [{"name": "App", "exposure": "lan", "domains": ["app.home.arpa"],
+                              "upstreams": ["127.0.0.1:1234"]}]},
+                   "old.home.arpa {\n    reverse_proxy 127.0.0.1:80\n}")
+    assert "-}+}" not in result["diff"]
+    assert "+https://app.home.arpa {" in result["diff"]
+    assert result["diff"].count("+https://app.home.arpa {") == 1
+
+
+def test_plan_deduplicates_repeated_findings_and_omits_pass_findings():
+    policy = {"apps": [{"name": "DNS", "exposure": "lan", "container_names": ["dns"],
+                       "container_ports": [53], "allowed_sources": ["192.168.0.0/24"]}]}
+    docker = {"available": True, "containers": [{"Names": "dns",
+             "Ports": "192.168.0.5:53->53/tcp, 192.168.0.5:53->53/udp"}]}
+    result = build_plan(policy, docker, {"available": True, "output": ""},
+                        {"results": []}, {"output": ""})
+    assert sum(item["code"] == "docker-firewall-review" for item in result["items"]) == 1
+    assert not any(item["code"] == "lan-source-rule" for item in result["items"])

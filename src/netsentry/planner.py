@@ -64,7 +64,7 @@ def build_plan(policy: dict[str, Any], docker: dict[str, Any], caddy: dict[str, 
                 items.append({"status": "blocked", "app": name, "code": code,
                               "message": "Direct exposure conflicts with proxy-only intent. A safe binding change needs the authoritative Compose/run configuration; NetSentry will not guess or alter Docker state."})
             elif code in {"docker-firewall-review", "lan-wildcard-bind", "lan-ufw-anywhere",
-                          "lan-source-rule-missing", "lan-source-rule"}:
+                          "lan-source-rule-missing"}:
                 items.append({"status": "review", "app": name, "code": code,
                               "message": "Firewall or Docker source filtering needs operator review. No firewall command is generated because published Docker traffic may bypass UFW."})
             elif code in {"unassigned-published-container", "policy-empty"}:
@@ -75,10 +75,20 @@ def build_plan(policy: dict[str, Any], docker: dict[str, Any], caddy: dict[str, 
         if proposed and not proposed.endswith("\n"):
             proposed += "\n"
         proposed += "\n".join(block for _, block in sorted(proposed_blocks)) + "\n"
-    diff = "".join(difflib.unified_diff(
-        caddy_text.splitlines(keepends=True), proposed.splitlines(keepends=True),
+    diff_lines = list(difflib.unified_diff(
+        caddy_text.splitlines(), proposed.splitlines(),
         fromfile=str(caddy.get("path", "Caddyfile")), tofile="Caddyfile (proposed)",
+        lineterm="",
     ))
+    diff = "\n".join(diff_lines) + ("\n" if diff_lines else "")
+    unique_items = []
+    seen_items = set()
+    for item in items:
+        identity = (item["status"], item["app"], item["code"], item["message"])
+        if identity not in seen_items:
+            seen_items.add(identity)
+            unique_items.append(item)
+    items = unique_items
     if not items:
         items.append({"status": "no-change", "app": "policy", "code": "no-proposal",
                       "message": "No supported changes were identified from current observations."})
@@ -89,4 +99,5 @@ def build_plan(policy: dict[str, Any], docker: dict[str, Any], caddy: dict[str, 
         "items": items, "diff": diff,
         "note": "Proposal only. NetSentry does not write configuration, apply firewall rules, restart services, or validate against the running server.",
     }
+
 
