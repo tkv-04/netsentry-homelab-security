@@ -1,3 +1,5 @@
 # One DNS hostname or IP address per line. Pass targets explicitly to commands.
-# Example: nas.home.arpa
-# Example: 192.168.1.20
+# Example entries:
+# ha.home.arpa
+# nas.home.arpa
+# 192.168.0.20
