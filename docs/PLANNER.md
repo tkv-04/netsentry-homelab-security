@@ -10,15 +10,19 @@
 - Marks proxy-only direct publications as blocked. It does not invent Docker Compose changes because the project has no authoritative deployment file to edit.
 - Marks LAN/Docker firewall conditions for operator review. It does not generate firewall commands because Docker-published traffic may bypass UFW and the firewall backend/chain ordering needs inspection.
 - Prints JSON with `--json`; a blocked plan exits with status 1.
+- Prints an approval hash bound to the raw Caddyfile and exact proposed route additions.
 
-## Safety boundary
+## Phase 4 execution boundary
 
-This phase is proposal-only. It does not write configuration, policy, backups, or temporary files; execute generated commands; invoke `caddy validate`; alter containers; or reload/restart services. `safe_to_apply` is always false. Review the diff and validate it against the actual host before applying any change manually.
+`netsentry apply-caddy` supports only proposed route additions. It requires the current approval hash, rejects changed Caddyfiles and symlinks, validates a staged copy with `caddy validate`, creates a timestamped backup, atomically replaces the Caddyfile, reloads Caddy, performs HTTPS checks, and writes a JSON-lines audit record. It rolls back the file and attempts a reload when the reload or connectivity check fails. On Linux it requires root. It never executes Docker or firewall changes.
+
+Execution is an explicit operator action. The planning command remains read-only; no apply command was run against the Pi during development. A successful Caddy update is not proof that direct Docker exposure is resolved; rerun the audit and review remaining findings.
 
 ## Raspberry Pi usage
 
 ```bash
 sudo "$(command -v netsentry)" plan policies.json --caddyfile /etc/caddy/Caddyfile
+sudo "$(command -v netsentry)" apply-caddy policies.json --caddyfile /etc/caddy/Caddyfile --approve <approval-sha256> --ca-cert /var/lib/caddy/.local/share/caddy/pki/authorities/local/root.crt
 ```
 
-The command needs read access to Docker, listener, firewall, policy, and Caddy state to produce a useful plan. It does not need write access to those system configurations.
+For Caddy internal certificates, pass the local root certificate with `--ca-cert`; use the actual path found on the Pi. Use the hash from the immediately preceding reviewed plan. A changed policy, Caddyfile, or observation that changes the proposed route set requires a new plan and hash.

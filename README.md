@@ -84,3 +84,16 @@ sudo "$(command -v netsentry)" plan policies.json --caddyfile /etc/caddy/Caddyfi
 ```
 
 The planner never writes the Caddyfile or policies, runs firewall commands, changes Docker, or restarts services. A proposed diff still needs review and validation before anyone applies it. See [docs/PLANNER.md](docs/PLANNER.md).
+
+## Phase 4: controlled Caddy execution
+
+Phase 4 currently supports only reviewed Caddy route additions. First generate a fresh dry-run plan and copy its approval hash. Applying requires the exact hash, root privileges on Linux, Caddy validation, a backup, an atomic replacement, a Caddy reload, and HTTPS checks for every proposed route.
+
+```bash
+sudo "$(command -v netsentry)" plan policies.json --caddyfile /etc/caddy/Caddyfile
+sudo "$(command -v netsentry)" apply-caddy policies.json --caddyfile /etc/caddy/Caddyfile --approve <approval-sha256> --ca-cert /var/lib/caddy/.local/share/caddy/pki/authorities/local/root.crt
+```
+
+For Caddy internal certificates, provide the local root certificate with `--ca-cert` (adjust the path to the certificate found on your host). The approval hash is invalidated if the Caddyfile or proposed route set changes. The command writes an execution record under the invoking user's state directory by default; use `--audit-log` to choose another path. On validation failure, no live replacement occurs. On reload or HTTPS-check failure, NetSentry restores the backup and attempts to reload the restored configuration. Verify the command's reported rollback result and backup path if an error occurs.
+
+Docker publication and firewall changes are deliberately not executable yet. The current project does not have authoritative Compose/deployment inputs or enough firewall-backend context to construct a narrowly scoped, reversible change safely. No Phase 4 command has been run against the Raspberry Pi as part of this work.

@@ -97,7 +97,10 @@ def build_plan(policy: dict[str, Any], docker: dict[str, Any], caddy: dict[str, 
         "summary": {status: sum(item["status"] == status for item in items)
                     for status in ("proposed", "review", "blocked", "no-change")},
         "items": items, "diff": diff,
+        "proposed_routes": [{"domain": domain, "block": block} for domain, block in sorted(proposed_blocks)],
         "note": "Proposal only. NetSentry does not write configuration, apply firewall rules, restart services, or validate against the running server.",
     }
+
+
 
 

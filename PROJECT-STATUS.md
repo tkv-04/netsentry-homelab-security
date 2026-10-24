@@ -23,16 +23,26 @@
 - [x] Read-only audit compares policy with local listener, Docker, Caddyfile, and firewall observations.
 - [x] Detect direct non-loopback publication for proxy-only apps.
 - [x] Check expected Caddy domains/upstreams and flag unmanaged published containers.
-- [x] Audit run on the Pi; the remaining findings are home-network remediation tasks, not missing audit features.
+- [x] Audit run on the Pi; remaining findings are home-network remediation tasks.
 
-## Phase 3: dry-run planner
+## Phase 3: complete
 
 - [x] Propose a Caddy diff for missing, unambiguous routes with safe domain/upstream values.
 - [x] Block proxy-only exposure fixes when authoritative Docker deployment configuration is unavailable.
 - [x] Flag Docker/firewall changes for operator review instead of guessing commands.
-- [x] Keep planning read-only; no apply, validation, restart, or write operation.
-- [ ] Review generated plans on the Pi and confirm the proposed routes match the intended configuration.
+- [x] Keep planning read-only; no apply, validation, restart, or write operation in `plan`.
+- [x] Plan run on the Pi and output reviewed.
+
+## Phase 4: in progress
+
+- [x] Approval hash binds the raw Caddyfile and exact proposed routes; stale state is rejected.
+- [x] Validate staged Caddyfile before replacement; keep timestamped backup and preserve file metadata.
+- [x] Atomic replacement, Caddy reload, HTTPS connectivity checks, JSON-lines audit log, and rollback attempt.
+- [x] Restrict execution to Caddy route additions; Docker/firewall execution remains unsupported.
+- [ ] Package and install the updated version on the Pi.
+- [ ] Operator review and deliberate execution on the Pi; verify backup, connectivity checks, audit log, and post-change audit.
+- [ ] Validate rollback behavior on a non-production test Caddy instance before relying on it for important services.
 
 ## Verify
 
-From the project folder, run `python -m pytest -q` and `ruff check src tests`. On the Pi, use `netsentry audit` to review observed state and `netsentry plan` to inspect proposals. Neither command changes system configuration.
+From the project folder, run `python -m pytest -q` and `ruff check src tests`. Phase 4 has only been exercised with local temporary files and mocked Caddy/check operations; it has not been run on the Pi.

@@ -205,6 +205,13 @@ def plan(
         raise typer.Exit(code=2) from error
     result = build_plan(policy, inspect_docker_ports(), inspect_caddy_config(caddyfile),
                         inspect_firewall(), inspect_ports())
+    from netsentry.execution import approval_digest, sha256_bytes
+    try:
+        base_hash = sha256_bytes(caddyfile.read_bytes())
+    except OSError:
+        base_hash = None
+    result["base_sha256"] = base_hash
+    result["approval_sha256"] = approval_digest(base_hash, result["proposed_routes"]) if base_hash else None
     if json_output:
         typer.echo(json.dumps(result, indent=2))
         return
@@ -214,12 +221,69 @@ def plan(
     typer.echo("Summary: " + ", ".join(f"{key}={value}" for key, value in result["summary"].items()))
     if result["diff"]:
         typer.echo("\nProposed Caddy diff:\n" + result["diff"])
+    if result["proposed_routes"]:
+        typer.echo("Approval hash (binds this Caddyfile and proposed routes): " + str(result["approval_sha256"]))
     typer.echo(result["note"])
     if result["summary"]["blocked"]:
         raise typer.Exit(code=1)
 
+@app.command("apply-caddy")
+def apply_caddy_command(
+    policy_file: Annotated[Path, typer.Argument(exists=True, readable=True, help="Version 1 JSON exposure policy.")],
+    approve: Annotated[str, typer.Option("--approve", help="Approval SHA-256 printed by the reviewed plan.")],
+    caddyfile: Annotated[Path, typer.Option("--caddyfile", help="Caddyfile to update.")] = Path("/etc/caddy/Caddyfile"),
+    audit_log: Annotated[Path | None, typer.Option("--audit-log", help="Execution audit log path.")] = None,
+    ca_cert: Annotated[Path | None, typer.Option("--ca-cert", help="Optional CA file for internal Caddy HTTPS checks.")] = None,
+) -> None:
+    """Apply only approved Caddy routes; validates, backs up, checks, audits, and rolls back on failure."""
+    from netsentry.execution import (
+        ExecutionError,
+        apply_caddy_update,
+        approval_digest,
+        sha256_bytes,
+    )
+    from netsentry.inspection import (
+        inspect_caddy_config,
+        inspect_docker_ports,
+        inspect_firewall,
+        inspect_ports,
+    )
+    from netsentry.planner import build_plan
+    from netsentry.policy import load_policy
+
+    try:
+        policy = load_policy(policy_file)
+        result = build_plan(policy, inspect_docker_ports(), inspect_caddy_config(caddyfile),
+                            inspect_firewall(), inspect_ports())
+        routes = result["proposed_routes"]
+        if not routes:
+            raise ExecutionError("the current plan contains no eligible Caddy route additions")
+        base_hash = sha256_bytes(caddyfile.read_bytes())
+        expected = approval_digest(base_hash, routes)
+        if approve != expected:
+            raise ExecutionError("approval hash is stale or does not match; review the latest netsentry plan output")
+        urls = [f"https://{route['domain']}" for route in routes]
+        typer.echo("Applying only these reviewed Caddy additions: " + ", ".join(route["domain"] for route in routes))
+        audit_log = audit_log or (Path.home() / ".local/state/netsentry/execution.jsonl")
+        from netsentry.execution import _check_https
+        if ca_cert is not None and (ca_cert.is_symlink() or not ca_cert.is_file()):
+            raise ExecutionError("--ca-cert must reference an existing regular CA file")
+        checker = (lambda url: _check_https(url, ca_cert=ca_cert)) if ca_cert else None
+        outcome = apply_caddy_update(caddyfile, routes, base_hash, approve, urls, audit_log, checker=checker)
+    except (OSError, TypeError, ValueError, ExecutionError) as error:
+        typer.echo(f"Caddy update failed safely: {error}", err=True)
+        raise typer.Exit(code=1) from error
+    typer.echo("Caddy update succeeded; backup: " + str(outcome["backup"]))
+    typer.echo("Execution audit: " + str(outcome["audit_log"]))
+    for check in outcome["connectivity"]:
+        typer.echo(f"HTTPS check passed: {check['url']} (HTTP {check['status_code']})")
+
 if __name__ == "__main__":
     app()
+
+
+
+
 
 
 
