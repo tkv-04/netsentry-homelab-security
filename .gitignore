@@ -13,3 +13,4 @@ dist/
 *.pfx
 reports/
 .tmp/
+policies.json

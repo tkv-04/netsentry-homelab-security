@@ -103,10 +103,11 @@ def format_report(report: dict[str, object], as_json: bool = False) -> str:
         if not containers:
             return "No running containers."
         return "\n".join(
-            f"{container.get('Names', container.get('ID', 'unknown'))}: "
+            f"{container.get('Names', container.get('ID', 'unknown'))} [{container.get('Image', 'image unknown')}]: "
             f"{container.get('Ports') or '(no published ports)'}"
             for container in containers
         )
     return str(report.get("output", report.get("error", "No inspection result.")))
+
 
 

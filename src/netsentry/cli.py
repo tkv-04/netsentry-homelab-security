@@ -138,7 +138,52 @@ def inspect_firewall_command(json_output: bool = typer.Option(False, "--json")) 
     typer.echo(format_report(inspect_firewall(), json_output))
 
 
+@app.command("audit")
+def audit(
+    policy_file: Annotated[Path, typer.Argument(exists=True, readable=True, help="Version 1 JSON exposure policy.")],
+    caddyfile: Annotated[Path, typer.Option("--caddyfile", help="Caddyfile to inspect.")] = Path("/etc/caddy/Caddyfile"),
+    json_output: bool = typer.Option(False, "--json", help="Print machine-readable findings."),
+) -> None:
+    """Compare declared app exposure policies with local read-only observations."""
+    from netsentry.audit import audit_policy
+    from netsentry.inspection import (
+        inspect_caddy_config,
+        inspect_docker_ports,
+        inspect_firewall,
+        inspect_ports,
+    )
+    from netsentry.policy import load_policy
+
+    try:
+        policy = load_policy(policy_file)
+    except (OSError, TypeError, ValueError, json.JSONDecodeError) as error:
+        typer.echo(f"Could not load policy: {error}", err=True)
+        raise typer.Exit(code=2) from error
+    findings = audit_policy(
+        policy,
+        inspect_docker_ports(),
+        inspect_caddy_config(caddyfile),
+        inspect_firewall(),
+        inspect_ports(),
+    )
+    counts = {severity: sum(item["severity"] == severity for item in findings)
+              for severity in ("mismatch", "review", "pass")}
+    report = {"summary": counts, "findings": findings}
+    if json_output:
+        typer.echo(json.dumps(report, indent=2))
+    elif findings:
+        for finding in findings:
+            typer.echo(f"{finding['severity'].upper()} [{finding['code']}] {finding['app']}: {finding['message']}")
+        typer.echo("Summary: " + ", ".join(f"{key}={value}" for key, value in counts.items()))
+    else:
+        typer.echo("No policy findings. Add app policies to detect unmanaged exposure.")
+    if counts["mismatch"]:
+        raise typer.Exit(code=1)
+
+
 
 if __name__ == "__main__":
     app()
+
+
 

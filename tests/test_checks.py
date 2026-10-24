@@ -71,16 +71,89 @@ def test_docker_report_formats_container_names_and_published_ports():
     report = {
         "available": True,
         "containers": [
-            {"Names": "homeassistant", "Ports": "0.0.0.0:8123->8123/tcp"},
+            {"Names": "homeassistant", "Image": "homeassistant:stable", "Ports": "0.0.0.0:8123->8123/tcp"},
             {"Names": "dns", "Ports": "(no published ports)"},
         ],
     }
     output = format_report(report)
-    assert "homeassistant: 0.0.0.0:8123->8123/tcp" in output
-    assert "dns: (no published ports)" in output
+    assert "homeassistant [homeassistant:stable]: 0.0.0.0:8123->8123/tcp" in output
+    assert "dns [image unknown]: (no published ports)" in output
 
 
 def test_docker_report_handles_no_running_containers():
     from netsentry.inspection import format_report
 
     assert format_report({"available": True, "containers": []}) == "No running containers."
+
+
+def test_policy_requires_a_supported_exposure(tmp_path):
+    from netsentry.policy import load_policy
+
+    path = tmp_path / "policy.json"
+    path.write_text('{"version":1,"apps":[{"name":"x","exposure":"guess"}]}', encoding="utf-8")
+    with pytest.raises(ValueError, match="exposure"):
+        load_policy(path)
+
+
+def test_docker_bindings_parse_wildcard_and_lan_addresses():
+    from netsentry.audit import docker_bindings
+
+    bindings = docker_bindings({"containers": [
+        {"Names": "jackett", "Image": "example/jackett", "Ports": "0.0.0.0:9117->9117/tcp, [::]:9117->9117/tcp"},
+        {"Names": "adguard", "Ports": "192.168.0.5:3000->3000/tcp"},
+    ]})
+    assert [(item["container"], item["host_ip"], item["host_port"]) for item in bindings] == [
+        ("jackett", "0.0.0.0", 9117), ("jackett", "::", 9117), ("adguard", "192.168.0.5", 3000)
+    ]
+
+
+def test_proxy_only_policy_flags_a_wildcard_docker_publication():
+    from netsentry.audit import audit_policy
+
+    findings = audit_policy(
+        {"apps": [{"name": "Jackett", "exposure": "proxy-only", "container_names": ["jackett"],
+                   "domains": ["jackett.home.arpa"], "upstreams": ["jackett:9117"]}]},
+        {"available": True, "containers": [{"Names": "jackett", "Ports": "0.0.0.0:9117->9117/tcp"}]},
+        {"available": True, "output": "jackett.home.arpa { reverse_proxy jackett:9117 }"},
+        {"results": []}, {"output": ""},
+    )
+    assert any(item["code"] == "proxy-only-published" and item["severity"] == "mismatch" for item in findings)
+
+
+def test_lan_policy_flags_unrestricted_ufw_rule():
+    from netsentry.audit import audit_policy
+
+    findings = audit_policy(
+        {"apps": [{"name": "GUI", "exposure": "lan", "host_ports": [8081],
+                   "allowed_sources": ["192.168.0.0/24"]}]},
+        {"available": True, "containers": []}, {"available": False},
+        {"results": [{"command": ["ufw", "status", "verbose"],
+                      "output": "8081 ALLOW IN Anywhere\n8081 (v6) ALLOW IN Anywhere (v6)"}]},
+        {"output": "tcp LISTEN 0 128 0.0.0.0:8081 0.0.0.0:*"},
+    )
+    assert any(item["code"] == "lan-ufw-anywhere" and item["severity"] == "mismatch" for item in findings)
+
+
+def test_audit_scopes_container_policy_to_selected_container_ports():
+    from netsentry.audit import audit_policy
+
+    policy = {"apps": [{"name": "DNS", "exposure": "lan", "container_names": ["adguardhome"],
+                        "container_ports": [53], "allowed_sources": ["192.168.0.0/24"]}]}
+    docker = {"available": True, "containers": [{
+        "Names": "adguardhome", "Ports": "192.168.0.5:53->53/tcp, 192.168.0.5:3000->3000/tcp"
+    }]}
+    findings = audit_policy(policy, docker, {"available": False}, {"results": []}, {"output": ""})
+    unassigned = [item for item in findings if item["code"] == "unassigned-published-container"]
+    assert len(unassigned) == 1
+    assert "3000" in unassigned[0]["message"]
+
+
+
+
+def test_policy_rejects_invalid_allowed_source_network(tmp_path):
+    from netsentry.policy import load_policy
+
+    path = tmp_path / "policy.json"
+    path.write_text('{"version":1,"apps":[{"name":"x","exposure":"lan","allowed_sources":["home"]}]}', encoding="utf-8")
+    with pytest.raises(ValueError, match="CIDR"):
+        load_policy(path)
