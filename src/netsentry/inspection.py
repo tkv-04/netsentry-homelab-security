@@ -98,5 +98,15 @@ def format_report(report: dict[str, object], as_json: bool = False) -> str:
         for result in report["results"]:
             blocks.append(f"$ {' '.join(result.get('command', []))}\n{result.get('output', result.get('error', ''))}")
         return "\n\n".join(blocks) + f"\n\n{report.get('note', '')}"
+    if "containers" in report:
+        containers = report["containers"]
+        if not containers:
+            return "No running containers."
+        return "\n".join(
+            f"{container.get('Names', container.get('ID', 'unknown'))}: "
+            f"{container.get('Ports') or '(no published ports)'}"
+            for container in containers
+        )
     return str(report.get("output", report.get("error", "No inspection result.")))
+
 

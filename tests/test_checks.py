@@ -63,3 +63,24 @@ def test_inspection_commands_do_not_use_a_shell(monkeypatch):
     assert report["output"] == "listening"
     assert observed["shell"] is not True
     assert observed["timeout"] == 10
+
+
+def test_docker_report_formats_container_names_and_published_ports():
+    from netsentry.inspection import format_report
+
+    report = {
+        "available": True,
+        "containers": [
+            {"Names": "homeassistant", "Ports": "0.0.0.0:8123->8123/tcp"},
+            {"Names": "dns", "Ports": "(no published ports)"},
+        ],
+    }
+    output = format_report(report)
+    assert "homeassistant: 0.0.0.0:8123->8123/tcp" in output
+    assert "dns: (no published ports)" in output
+
+
+def test_docker_report_handles_no_running_containers():
+    from netsentry.inspection import format_report
+
+    assert format_report({"available": True, "containers": []}) == "No running containers."

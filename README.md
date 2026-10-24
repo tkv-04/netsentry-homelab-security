@@ -62,3 +62,5 @@ Open `http://<pi-ip-address>:8081` from a device on the same home network. The d
 ## Safety
 
 NetSentry does not change ports, Docker containers, Caddy configuration, firewall rules, or server settings. Inspection commands only query the current machine. See [docs/SECURITY.md](docs/SECURITY.md).
+
+Docker may deny access to `/var/run/docker.sock` for a normal user. To inspect Docker once without changing group membership, run `sudo "$(command -v netsentry)" inspect docker-ports` from the activated virtual environment. The command only invokes `docker ps`.
